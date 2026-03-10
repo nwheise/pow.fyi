@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   Snowflake, BarChart3, Clock, Sun, Thermometer,
   TrendingUp, AlertTriangle, RefreshCw, Star, Layers,
@@ -12,6 +12,7 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { ElevationToggle } from '@/components/ElevationToggle';
 import { SnowTimeline } from '@/components/SnowTimeline';
 import { ConditionsSummary } from '@/components/ConditionsSummary';
+import { ShareButton } from '@/components/ShareButton';
 import { DailyForecastChart } from '@/components/charts/DailyForecastChart';
 import { HourlyDetailChart } from '@/components/charts/HourlyDetailChart';
 import { HourlySnowChart } from '@/components/charts/HourlySnowChart';
@@ -23,17 +24,30 @@ import { todayIsoInTimezone } from '@/utils/dateKey';
 import { useUnits } from '@/context/UnitsContext';
 import { useTimezone } from '@/context/TimezoneContext';
 import type { ElevationBand, BandForecast, DailyMetrics } from '@/types';
+import type { ShareCardData } from '@/utils/shareCard';
 import './ResortPage.css';
 
 export function ResortPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
   const resort = useMemo(() => getResortBySlug(slug ?? ''), [slug]);
   const { forecast, loading, error, refetch } = useForecast(resort);
   const { toggle: toggleFav, isFav } = useFavorites();
   const { temp, elev, snow } = useUnits();
   const { tz, fmtDate } = useTimezone();
-  const [band, setBand] = useState<ElevationBand>('mid');
-  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
+
+  // Initialise elevation band and selected day from URL query params (deep-link support)
+  const initialBand = useMemo(() => {
+    const b = searchParams.get('band');
+    return b === 'base' || b === 'mid' || b === 'top' ? b : 'mid';
+  }, [searchParams]);
+  const initialDay = useMemo(() => {
+    const d = Number(searchParams.get('day'));
+    return Number.isFinite(d) && d >= 0 ? d : 0;
+  }, [searchParams]);
+
+  const [band, setBand] = useState<ElevationBand>(initialBand);
+  const [selectedDayIdx, setSelectedDayIdx] = useState(initialDay);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const prevFetchedAtRef = useRef<string | undefined>(undefined);
 
@@ -74,8 +88,20 @@ export function ResortPage() {
     return () => { cancelled = true; };
   }, [resort, tz]);
 
-  // Reset selected day when forecast data is refetched (not on band change)
-  useEffect(() => { setSelectedDayIdx(0); }, [forecast?.fetchedAt]);
+  // Reset selected day when forecast data is refetched (not on band change).
+  // On first load, clamp the deep-linked day index to the valid range.
+  const hasAppliedInitialDay = useRef(false);
+  useEffect(() => {
+    if (!hasAppliedInitialDay.current) {
+      hasAppliedInitialDay.current = true;
+      // Clamp the initial day to the actual number of forecast days
+      const maxIdx = (forecast?.[band]?.daily.length ?? 1) - 1;
+      if (initialDay > maxIdx) setSelectedDayIdx(Math.max(0, maxIdx));
+    } else {
+      setSelectedDayIdx(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on new forecast data
+  }, [forecast?.fetchedAt]);
 
   const bandData: BandForecast | undefined = forecast?.[band];
 
@@ -123,6 +149,20 @@ export function ResortPage() {
     ? bandData.daily.reduce((s, d) => s + d.snowfallSum, 0)
     : 0;
 
+  // Build share card data for the ShareButton
+  const shareCardData: ShareCardData | null = bandData
+    ? {
+        resort,
+        daily: bandData.daily,
+        band,
+        elevation: bandData.elevation,
+        weekTotalSnow,
+        snowUnit: snow,
+        tempUnit: temp,
+        elevUnit: elev,
+      }
+    : null;
+
   return (
     <div className="resort-page">
       {/* Header */}
@@ -152,9 +192,12 @@ export function ResortPage() {
           </p>
         </div>
         <div className="resort-page__header-right">
-          <button className="resort-page__refresh" onClick={handleRefresh} disabled={loading}>
-            {loading ? 'Loading…' : <><RefreshCw size={14} /> Refresh</>}
-          </button>
+          <div className="resort-page__header-actions">
+            <ShareButton cardData={shareCardData} selectedDayIdx={selectedDayIdx} />
+            <button className="resort-page__refresh" onClick={handleRefresh} disabled={loading}>
+              {loading ? 'Loading…' : <><RefreshCw size={14} /> Refresh</>}
+            </button>
+          </div>
           {lastRefreshed && (
             <span className="resort-page__last-refreshed">
               {fmtDate(lastRefreshed.toISOString(), { hour: 'numeric', minute: '2-digit' })}
