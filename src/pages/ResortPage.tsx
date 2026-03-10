@@ -13,6 +13,8 @@ import { ElevationToggle } from '@/components/ElevationToggle';
 import { SnowTimeline } from '@/components/SnowTimeline';
 import { ConditionsSummary } from '@/components/ConditionsSummary';
 import { useShare } from '@/context/ShareContext';
+import { usePageMeta } from '@/hooks/usePageMeta';
+import { renderShareCard } from '@/utils/shareCard';
 import { DailyForecastChart } from '@/components/charts/DailyForecastChart';
 import { HourlyDetailChart } from '@/components/charts/HourlyDetailChart';
 import { HourlySnowChart } from '@/components/charts/HourlySnowChart';
@@ -132,19 +134,6 @@ export function ResortPage() {
     return Math.max(...depths) * 100; // m → cm
   }, [forecast]);
 
-  if (!resort) {
-    return (
-      <div className="resort-page__empty">
-        <h2>Resort not found</h2>
-        <Link to="/">← Back to all resorts</Link>
-      </div>
-    );
-  }
-
-  const selectedDayLabel = selectedDay
-    ? fmtDate(selectedDay.date + 'T12:00:00', { weekday: 'long', month: 'short', day: 'numeric' })
-    : '';
-
   // Compute 7-day total snowfall
   const weekTotalSnow = bandData
     ? bandData.daily.reduce((s, d) => s + d.snowfallSum, 0)
@@ -153,7 +142,7 @@ export function ResortPage() {
   // Build share card data for the ShareButton
   const shareCardData: ShareCardData | null = useMemo(
     () =>
-      bandData
+      resort && bandData
         ? {
             resort,
             daily: bandData.daily,
@@ -165,7 +154,6 @@ export function ResortPage() {
             elevUnit: elev,
           }
         : null,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [bandData, resort, band, weekTotalSnow, snow, temp, elev],
   );
 
@@ -178,6 +166,42 @@ export function ResortPage() {
   useEffect(() => {
     return () => setShareData(null);
   }, [setShareData]);
+
+  // Generate OG image data URL from the share card canvas
+  const ogImageUrl = useMemo(() => {
+    if (!shareCardData) return null;
+    try {
+      return renderShareCard(shareCardData).toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  }, [shareCardData]);
+
+  // Build OG meta content
+  const ogTitle = resort ? `${resort.name} Snow Forecast | Pow.fyi` : 'Pow.fyi — Ski Resort Snow Forecasts';
+  const ogDescription = resort
+    ? weekTotalSnow > 0
+      ? `${resort.name} — ${snow === 'in' ? `${Math.round(cmToIn(weekTotalSnow))}″` : `${Math.round(weekTotalSnow)}cm`} of new snow forecast over the next 7 days. Free ski resort forecasts.`
+      : `7-day snow forecast for ${resort.name}, ${resort.region}. Free ski resort forecasts.`
+    : 'Free & open-source ski resort snow forecasts, historical snowfall, and weather visualizations.';
+  const ogUrl = resort
+    ? `${window.location.origin}/resort/${resort.slug}`
+    : window.location.href;
+
+  usePageMeta({ title: ogTitle, description: ogDescription, url: ogUrl, image: ogImageUrl });
+
+  if (!resort) {
+    return (
+      <div className="resort-page__empty">
+        <h2>Resort not found</h2>
+        <Link to="/">← Back to all resorts</Link>
+      </div>
+    );
+  }
+
+  const selectedDayLabel = selectedDay
+    ? fmtDate(selectedDay.date + 'T12:00:00', { weekday: 'long', month: 'short', day: 'numeric' })
+    : '';
 
   return (
     <div className="resort-page">
