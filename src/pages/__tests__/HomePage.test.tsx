@@ -212,47 +212,35 @@ describe('HomePage', () => {
     expect(lines.length).toBe(2);
   });
 
-  it('keeps babka easter egg open after long animation time', async () => {
+  it('babka easter egg schedules auto-dismiss after 5 seconds', async () => {
     const user = userEvent.setup();
-    let firstRafCallback: FrameRequestCallback | null = null;
-    const originalRequestAnimationFrame = window.requestAnimationFrame;
-    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    const capturedDelays: number[] = [];
+    const originalSetTimeout = globalThis.setTimeout;
 
-    const requestAnimationFrameMock = mock((cb: FrameRequestCallback) => {
-      if (firstRafCallback == null) {
-        firstRafCallback = cb;
-      }
-      return 1;
-    });
+    // Use a plain function, NOT mock() — mock() sets _isMockFunction=true which
+    // causes @testing-library/react to treat it as jest fake timers and throw.
+    const patchedSetTimeout = (...args: Parameters<typeof setTimeout>): ReturnType<typeof setTimeout> => {
+      const [, delay] = args;
+      capturedDelays.push(typeof delay === 'number' ? delay : 0);
+      return originalSetTimeout(...args);
+    };
 
-    Object.defineProperty(window, 'requestAnimationFrame', {
-      value: requestAnimationFrameMock,
-      configurable: true,
-    });
-
-    Object.defineProperty(window, 'cancelAnimationFrame', {
-      value: mock(() => {}),
+    Object.defineProperty(globalThis, 'setTimeout', {
+      value: patchedSetTimeout,
       configurable: true,
     });
 
     try {
       renderWithProviders(<HomePage />);
-
       const search = screen.getByPlaceholderText('Search resorts…');
       await user.type(search, 'babka');
 
-      expect(firstRafCallback).not.toBeNull();
-      // Simulate an animation frame far past the old timeout threshold.
-      firstRafCallback?.(60_000);
-
       expect(screen.getByTestId('babka-easter-egg')).toBeInTheDocument();
+      // A 5-second auto-dismiss timeout should have been scheduled
+      expect(capturedDelays).toContain(5000);
     } finally {
-      Object.defineProperty(window, 'requestAnimationFrame', {
-        value: originalRequestAnimationFrame,
-        configurable: true,
-      });
-      Object.defineProperty(window, 'cancelAnimationFrame', {
-        value: originalCancelAnimationFrame,
+      Object.defineProperty(globalThis, 'setTimeout', {
+        value: originalSetTimeout,
         configurable: true,
       });
     }
