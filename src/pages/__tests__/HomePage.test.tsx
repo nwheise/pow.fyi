@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HomePage } from '@/pages/HomePage';
@@ -6,6 +6,10 @@ import { renderWithProviders } from '@/test/test-utils';
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+afterEach(() => {
+  mock.restore();
 });
 
 describe('HomePage', () => {
@@ -206,5 +210,51 @@ describe('HomePage', () => {
     expect(overlay.querySelector('svg')).toBeInTheDocument();
     const lines = overlay.querySelectorAll('line');
     expect(lines.length).toBe(2);
+  });
+
+  it('keeps babka easter egg open after long animation time', async () => {
+    const user = userEvent.setup();
+    let firstRafCallback: FrameRequestCallback | null = null;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+
+    const requestAnimationFrameMock = mock((cb: FrameRequestCallback) => {
+      if (firstRafCallback == null) {
+        firstRafCallback = cb;
+      }
+      return 1;
+    });
+
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      value: requestAnimationFrameMock,
+      configurable: true,
+    });
+
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      value: mock(() => {}),
+      configurable: true,
+    });
+
+    try {
+      renderWithProviders(<HomePage />);
+
+      const search = screen.getByPlaceholderText('Search resorts…');
+      await user.type(search, 'babka');
+
+      expect(firstRafCallback).not.toBeNull();
+      // Simulate an animation frame far past the old timeout threshold.
+      firstRafCallback?.(60_000);
+
+      expect(screen.getByTestId('babka-easter-egg')).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'requestAnimationFrame', {
+        value: originalRequestAnimationFrame,
+        configurable: true,
+      });
+      Object.defineProperty(window, 'cancelAnimationFrame', {
+        value: originalCancelAnimationFrame,
+        configurable: true,
+      });
+    }
   });
 });

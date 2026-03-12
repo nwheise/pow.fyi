@@ -13,7 +13,6 @@ const BABKA_EYE_LEFT_X = 0.37;
 const BABKA_EYE_LEFT_Y = 0.21;
 const BABKA_EYE_RIGHT_X = 0.62;
 const BABKA_EYE_RIGHT_Y = 0.21;
-const BABKA_DURATION = 5000;
 
 export function HomePage() {
   const [query, setQuery] = useState('');
@@ -69,11 +68,10 @@ export function HomePage() {
     return () => clearTimeout(timeout);
   }, [isMfjhEasterEgg, mfjhSize]);
 
-  // Babka easter egg: bounce image around screen for 5s then auto-dismiss.
+  // Babka easter egg: bounce image around screen until user dismisses.
   const [babkaPos, setBabkaPos] = useState({ x: 100, y: 100 });
   const babkaPosRef = useRef({ x: 100, y: 100 });
   const babkaVelRef = useRef({ vx: 1.5, vy: 1.2 });
-  const babkaStartRef = useRef(0);
 
   useEffect(() => {
     if (!isBabkaEasterEgg) return;
@@ -85,16 +83,10 @@ export function HomePage() {
       vx: (Math.random() > 0.5 ? 1 : -1) * 1.5,
       vy: (Math.random() > 0.5 ? 1 : -1) * 1.2,
     };
-    babkaStartRef.current = performance.now();
     setBabkaPos({ x: startX, y: startY });
 
     let rafId: number;
-    function tick(now: number) {
-      if (now - babkaStartRef.current >= BABKA_DURATION) {
-        setQuery('');
-        return;
-      }
-
+    function tick() {
       let { x, y } = babkaPosRef.current;
       let { vx, vy } = babkaVelRef.current;
 
