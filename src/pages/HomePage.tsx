@@ -6,8 +6,8 @@ import { ResortCard } from '@/components/ResortCard';
 import { FavoriteCard } from '@/components/FavoriteCard';
 import { SearchDropdown } from '@/components/SearchDropdown';
 import babkaImage from '@/resources/images/babka.png';
-import mfjhImage from '@/resources/images/mfjh.jpg';
-import ofekImage from '@/resources/images/ofek.jpeg';
+import mfjhImage from '@/resources/images/mfjh.webp';
+import ofekImage from '@/resources/images/ofek.webp';
 import './HomePage.css';
 
 const BABKA_SIZE = 200;
