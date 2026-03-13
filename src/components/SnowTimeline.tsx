@@ -3,8 +3,9 @@
  *
  * Compact snow summary: shows past 7 days + upcoming 7 days
  * as a compact horizontal bar chart with a vertical "today" divider.
- * Future forecast days are broken into AM / PM / Overnight sub-bars for
- * more granular visibility into when snowfall is expected.
+ * Forecast days can be broken into attribution-period sub-bars
+ * (calendar day or ski day) for more granular visibility into
+ * when snowfall is expected.
  */
 import { useMemo } from 'react';
 import type { DailyMetrics, HourlyMetrics } from '@/types';
@@ -23,7 +24,7 @@ interface Props {
   recentDays: DailyMetrics[];
   /** Forecast days (up to 7, chronological order) */
   forecastDays: DailyMetrics[];
-  /** Hourly forecast data — used to split future days into AM/PM/Overnight */
+  /** Hourly forecast data — used to split forecast days into the active attribution periods */
   forecastHourly?: HourlyMetrics[];
   attributionMode?: SnowAttributionMode;
 }
@@ -63,24 +64,25 @@ export function SnowTimeline({
           }))
         : [];
 
-    const todayPeriods = todayDay ? toDisplayPeriods(todayDay.date) : [];
+    const buildForecastBar = (date: string, fallbackSnowfallSum: number) => {
+      const periods = toDisplayPeriods(date);
+      const raw = periods.length > 0
+        ? periods.reduce((sum, period) => sum + period.snowfall, 0)
+        : fallbackSnowfallSum;
+
+      return {
+        date,
+        snow: toDisplay(raw),
+        raw,
+        periods,
+      };
+    };
+
     const todayBar = todayDay
-      ? {
-          date: todayDay.date,
-          snow: toDisplay(todayDay.snowfallSum),
-          raw: todayDay.snowfallSum,
-          periods: todayPeriods,
-        }
+      ? buildForecastBar(todayDay.date, todayDay.snowfallSum)
       : null;
 
-    const futureBars = future.map((d) => {
-      return {
-        date: d.date,
-        snow: toDisplay(d.snowfallSum),
-        raw: d.snowfallSum,
-        periods: toDisplayPeriods(d.date),
-      };
-    });
+    const futureBars = future.map((d) => buildForecastBar(d.date, d.snowfallSum));
 
     // For the max calculation, consider individual period values so bars scale correctly
     let todayPeriodSnow: number[] = [];
@@ -97,8 +99,7 @@ export function SnowTimeline({
     const maxSnow = Math.max(...allSnow, 0.1); // avoid 0 max
 
     const pastTotal = past.reduce((s, d) => s + d.snowfallSum, 0);
-    const futureTotal =
-      (todayDay ? todayDay.snowfallSum : 0) + future.reduce((s, d) => s + d.snowfallSum, 0);
+    const futureTotal = (todayBar?.raw ?? 0) + futureBars.reduce((sum, bar) => sum + bar.raw, 0);
 
     return { pastBars, todayBar, futureBars, maxSnow, pastTotal, futureTotal };
   }, [recentDays, forecastDays, forecastHourly, attributionMode, isImperial]);
@@ -154,7 +155,7 @@ export function SnowTimeline({
           })}
         </div>
 
-        {/* Today bar — split into AM / PM / Overnight when hourly data is available */}
+        {/* Today bar — split into the active attribution periods when hourly data is available */}
         <div className="snow-timeline__today" aria-label="Today">
           <span className="snow-timeline__bar-value snow-timeline__bar-value--today">
             {todayBar ? todayBar.snow : ''}
@@ -189,7 +190,7 @@ export function SnowTimeline({
           <span className="snow-timeline__divider-label">Today</span>
         </div>
 
-        {/* Future bars — split into AM / PM / Overnight sub-bars */}
+        {/* Future bars — split into the active attribution period sub-bars */}
         <div className="snow-timeline__section snow-timeline__section--future">
           {futureBars.map((bar) => {
             const hasPeriods = forecastHourly && bar.periods.some((period) => period.snow > 0);

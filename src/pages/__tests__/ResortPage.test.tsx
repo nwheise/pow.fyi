@@ -207,10 +207,9 @@ describe('ResortPage', () => {
 
   it('renders a calendar day / ski day attribution toggle that defaults to calendar day', () => {
     renderResortPage();
-    const attributionToggle = screen.getByRole('radiogroup', { name: 'Daily snow attribution' });
-    expect(attributionToggle).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Calendar day' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByRole('radio', { name: 'Ski day' })).toHaveAttribute('aria-checked', 'false');
+    expect(screen.getAllByText('Daily snow attribution').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Ski day' })).not.toBeChecked();
   });
 
   it('shows the attribution tooltip and allows switching to ski day', async () => {
@@ -218,8 +217,8 @@ describe('ResortPage', () => {
     renderResortPage();
     expect(screen.getByTitle(/Calendar day/)).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Ski day' }));
-    expect(screen.getByRole('radio', { name: 'Calendar day' })).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByRole('radio', { name: 'Ski day' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: 'Calendar day' })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Ski day' })).toBeChecked();
   });
 
   it('renders refresh button in header', () => {

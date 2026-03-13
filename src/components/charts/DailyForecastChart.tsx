@@ -53,7 +53,7 @@ export function DailyForecastChart({
     const toDisplay = (cm: number) =>
       isImperial ? +cmToIn(cm).toFixed(1) : +cm.toFixed(1);
 
-    // When hourly data is available, split each day into AM/PM/Overnight periods
+    // When hourly data is available, split each day into the active attribution periods
     const hasPeriods = !!hourly;
     const periodDefs = getSnowAttributionPeriods(attributionMode);
     const periodData = periodDefs.reduce<Record<string, number[]>>((acc, period) => {

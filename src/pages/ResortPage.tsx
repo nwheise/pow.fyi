@@ -37,6 +37,11 @@ Ski day
 • Overnight: 6 pm previous day–8 am today
 • Daytime: 8 am–6 pm today`;
 
+const SNOW_ATTRIBUTION_OPTIONS: Array<{ value: SnowAttributionMode; label: string }> = [
+  { value: 'calendar', label: 'Calendar day' },
+  { value: 'ski', label: 'Ski day' },
+];
+
 export function ResortPage() {
   const { slug } = useParams<{ slug: string }>();
   const [searchParams] = useSearchParams();
@@ -292,26 +297,25 @@ export function ResortPage() {
               <Info size={14} />
             </button>
           </div>
-          <div className="resort-page__attribution-toggle" role="radiogroup" aria-label="Daily snow attribution">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={snowAttributionMode === 'calendar'}
-              className={`resort-page__attribution-btn ${snowAttributionMode === 'calendar' ? 'active' : ''}`}
-              onClick={() => setSnowAttributionMode('calendar')}
-            >
-              Calendar day
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={snowAttributionMode === 'ski'}
-              className={`resort-page__attribution-btn ${snowAttributionMode === 'ski' ? 'active' : ''}`}
-              onClick={() => setSnowAttributionMode('ski')}
-            >
-              Ski day
-            </button>
-          </div>
+          <fieldset className="resort-page__attribution-toggle">
+            <legend className="resort-page__sr-only">Daily snow attribution</legend>
+            {SNOW_ATTRIBUTION_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={`resort-page__attribution-btn ${snowAttributionMode === option.value ? 'active' : ''}`}
+              >
+                <input
+                  className="resort-page__attribution-input"
+                  type="radio"
+                  name="snow-attribution"
+                  value={option.value}
+                  checked={snowAttributionMode === option.value}
+                  onChange={() => setSnowAttributionMode(option.value)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </fieldset>
         </div>
       </div>
 
