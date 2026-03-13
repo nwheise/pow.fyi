@@ -1028,3 +1028,19 @@ Requested feature (GitHub issue: "Babka Easter Egg") to add a bouncing laser-eye
 - `src/pages/HomePage.tsx` — added `BabkaOverlay` component (RAF animation via DOM refs, document-level Escape/Enter handler, `prefers-reduced-motion` check), `isBabkaEasterEgg` derived state, and `babkaDismiss` callback
 - `src/pages/HomePage.css` — added `.home__easter-egg--babka`, `.home__babka-image`, `.home__babka-lasers`, `.home__babka-laser`, `@keyframes babkaLaserPulse`, and `@media (prefers-reduced-motion: reduce)` override
 - `src/pages/__tests__/HomePage.test.tsx` — added tests for case-insensitive babka detection, partial-match exclusion, SVG laser line rendering, and indefinite-run behavior
+
+---
+
+## Argo Easter Egg
+
+### What changed
+Added a fourth easter egg triggered by searching "argo" (case-insensitive) in the home page search bar. When triggered, a full-screen dark overlay displays the Argo image centered on screen. The image holds still for 3 seconds, then shoots off-screen to the right via a CSS `translateX(120vw)` transition (0.5s ease-in), and auto-dismisses once the animation completes (3.5s total). Clicking or pressing Enter/Space on the overlay also dismisses it early.
+
+### Why
+Requested feature to add a fun easter egg for the "argo" keyword, following the same pattern as the existing ofek, mfjh, and babka easter eggs.
+
+### Key files affected
+- `src/pages/HomePage.tsx` — added `isArgoEasterEgg` derived state, `isArgoShooting` state, shoot+dismiss `useEffect`, and argo overlay JSX with `data-testid="argo-easter-egg"`
+- `src/pages/HomePage.css` — added `.home__easter-egg-image--argo` (static, no spin) and `.home__easter-egg-image--argo-shoot` (translateX + transition) styles
+- `src/pages/__tests__/HomePage.test.tsx` — added tests for case-insensitive argo detection, partial-match exclusion, and shoot animation timing (3s hold → shoot class added)
+- `src/resources/images/argo.jpg` — new image asset
