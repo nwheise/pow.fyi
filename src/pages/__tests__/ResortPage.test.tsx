@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll, mock } from 'bun:test';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Routes, Route } from 'react-router-dom';
 import { MemoryRouter } from 'react-router-dom';
 import { UnitsProvider } from '@/context/UnitsContext';
@@ -93,6 +94,30 @@ mock.module('@/hooks/useWeather', () => ({
   })),
 }));
 
+mock.module('@/components/charts/DailyForecastChart', () => ({
+  DailyForecastChart: () => <div data-testid="daily-forecast-chart" />,
+}));
+
+mock.module('@/components/charts/HourlyDetailChart', () => ({
+  HourlyDetailChart: () => <div data-testid="hourly-detail-chart" />,
+}));
+
+mock.module('@/components/charts/HourlySnowChart', () => ({
+  HourlySnowChart: () => <div data-testid="hourly-snow-chart" />,
+}));
+
+mock.module('@/components/charts/RecentSnowChart', () => ({
+  RecentSnowChart: () => <div data-testid="recent-snow-chart" />,
+}));
+
+mock.module('@/components/charts/FreezingLevelChart', () => ({
+  FreezingLevelChart: () => <div data-testid="freezing-level-chart" />,
+}));
+
+mock.module('@/components/charts/UVIndexChart', () => ({
+  UVIndexChart: () => <div data-testid="uv-index-chart" />,
+}));
+
 // Import after mocks are set up
 const { ResortPage } = await import('@/pages/ResortPage');
 
@@ -177,7 +202,46 @@ describe('ResortPage', () => {
 
   it('renders elevation toggle', () => {
     renderResortPage();
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
+    expect(screen.getByRole('radiogroup', { name: 'Elevation band' })).toBeInTheDocument();
+  });
+
+  it('renders a calendar day / ski day attribution toggle that defaults to calendar day', () => {
+    renderResortPage();
+    expect(screen.getAllByText('Daily snow attribution').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Ski day' })).not.toBeChecked();
+  });
+
+  it('shows the attribution tooltip and allows switching to ski day', async () => {
+    const user = userEvent.setup();
+    renderResortPage();
+    expect(screen.getByTitle(/Calendar day/)).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: 'Ski day' }));
+    expect(screen.getByRole('radio', { name: 'Calendar day' })).not.toBeChecked();
+    expect(screen.getByRole('radio', { name: 'Ski day' })).toBeChecked();
+  });
+
+  it('opens and closes the attribution info popover from the info icon', async () => {
+    const user = userEvent.setup();
+    renderResortPage();
+
+    const infoButton = screen.getByRole('button', { name: 'Snow attribution time ranges' });
+    expect(infoButton).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('dialog', { name: 'Snow attribution time ranges' })).not.toBeInTheDocument();
+
+    await user.click(infoButton);
+    expect(infoButton).toHaveAttribute('aria-expanded', 'true');
+    const dialog = screen.getByRole('dialog', { name: 'Snow attribution time ranges' });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveFocus();
+    expect(within(dialog).getByText('Calendar day')).toBeInTheDocument();
+    expect(within(dialog).getByText('Morning: 12 am–8 am')).toBeInTheDocument();
+    expect(within(dialog).getByText('Overnight: 6 pm previous day–8 am today')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(infoButton).toHaveAttribute('aria-expanded', 'false');
+    expect(infoButton).toHaveFocus();
+    expect(screen.queryByRole('dialog', { name: 'Snow attribution time ranges' })).not.toBeInTheDocument();
   });
 
   it('renders refresh button in header', () => {
