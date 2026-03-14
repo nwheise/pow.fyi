@@ -3,7 +3,11 @@ import { render, screen } from '@testing-library/react';
 import { UnitsProvider } from '@/context/UnitsContext';
 import { TimezoneProvider } from '@/context/TimezoneContext';
 import { SnowTimeline } from '@/components/SnowTimeline';
-import { splitDayPeriods } from '@/components/snowTimelinePeriods';
+import {
+  splitDayPeriods,
+  splitSnowAttributionPeriods,
+  type SnowAttributionMode,
+} from '@/components/snowTimelinePeriods';
 import type { DailyMetrics, HourlyMetrics } from '@/types';
 
 function makeDailyMetrics(date: string, snowfallSum: number): DailyMetrics {
@@ -60,11 +64,17 @@ function renderTimeline(
   recentDays: DailyMetrics[],
   forecastDays: DailyMetrics[],
   forecastHourly?: HourlyMetrics[],
+  attributionMode?: SnowAttributionMode,
 ) {
   return render(
     <UnitsProvider>
       <TimezoneProvider>
-        <SnowTimeline recentDays={recentDays} forecastDays={forecastDays} forecastHourly={forecastHourly} />
+        <SnowTimeline
+          recentDays={recentDays}
+          forecastDays={forecastDays}
+          forecastHourly={forecastHourly}
+          attributionMode={attributionMode}
+        />
       </TimezoneProvider>
     </UnitsProvider>,
   );
@@ -129,6 +139,57 @@ describe('SnowTimeline', () => {
     expect(jan15.am).toBe(0);
     expect(jan15.pm).toBe(0);
     expect(jan15.overnight).toBe(5);
+  });
+
+  it('supports calendar day attribution windows', () => {
+    const hourly: HourlyMetrics[] = [
+      makeHourlyMetrics('2025-01-15T19:00', 3),
+      makeHourlyMetrics('2025-01-16T02:00', 5),
+      makeHourlyMetrics('2025-01-16T09:00', 7),
+      makeHourlyMetrics('2025-01-16T20:00', 11),
+    ];
+
+    const periods = splitSnowAttributionPeriods('2025-01-16', hourly, 'calendar');
+    expect(periods.map((period) => period.label)).toEqual(['Morning', 'Day', 'Night']);
+    expect(periods.map((period) => period.snowfall)).toEqual([5, 7, 11]);
+  });
+
+  it('supports ski day attribution windows', () => {
+    const hourly: HourlyMetrics[] = [
+      makeHourlyMetrics('2025-01-15T19:00', 3),
+      makeHourlyMetrics('2025-01-16T02:00', 5),
+      makeHourlyMetrics('2025-01-16T09:00', 7),
+      makeHourlyMetrics('2025-01-16T20:00', 11),
+    ];
+
+    const periods = splitSnowAttributionPeriods('2025-01-16', hourly, 'ski');
+    expect(periods.map((period) => period.label)).toEqual(['Overnight', 'Daytime']);
+    expect(periods.map((period) => period.snowfall)).toEqual([8, 7]);
+  });
+
+  it('uses attributed hourly totals for displayed day totals and next-7d total in ski mode', () => {
+    const skiForecastDays = [
+      makeDailyMetrics('2025-01-16', 99),
+      makeDailyMetrics('2025-01-17', 99),
+    ];
+    const skiHourly = [
+      makeHourlyMetrics('2025-01-15T19:00', 3),
+      makeHourlyMetrics('2025-01-16T02:00', 5),
+      makeHourlyMetrics('2025-01-16T09:00', 7),
+      makeHourlyMetrics('2025-01-16T20:00', 11),
+      makeHourlyMetrics('2025-01-17T03:00', 13),
+      makeHourlyMetrics('2025-01-17T09:00', 17),
+    ];
+
+    const { container } = renderTimeline([], skiForecastDays, skiHourly, 'ski');
+    const totalValues = container.querySelectorAll('.snow-timeline__total-value');
+    expect(totalValues[1]?.textContent).toBe('22.0"');
+
+    const todayValue = container.querySelector('.snow-timeline__bar-value--today');
+    expect(todayValue?.textContent).toBe('5.9');
+
+    const futureValue = container.querySelector('.snow-timeline__section--future .snow-timeline__bar-value');
+    expect(futureValue?.textContent).toBe('16.1');
   });
 
   it('renders the component with accessible label', () => {
@@ -258,15 +319,15 @@ describe('SnowTimeline', () => {
       expect(futureBars.length).toBe(2);
     });
 
-    it('shows period tooltips with Morning/Afternoon/Overnight labels', () => {
+    it('shows period tooltips with current period labels', () => {
       const { container } = renderTimeline(recentDays, forecastDays, forecastHourly);
       const amBar = container.querySelector('.snow-timeline__bar--am');
       expect(amBar).toBeInTheDocument();
       expect(amBar!.getAttribute('title')).toContain('Morning snow');
       const pmBar = container.querySelector('.snow-timeline__bar--pm');
-      expect(pmBar!.getAttribute('title')).toContain('Afternoon snow');
+      expect(pmBar!.getAttribute('title')).toContain('Day snow');
       const nightBar = container.querySelector('.snow-timeline__bar--overnight');
-      expect(nightBar!.getAttribute('title')).toContain('Overnight snow');
+      expect(nightBar!.getAttribute('title')).toContain('Night snow');
     });
 
     it('uses periods track layout for days with snow', () => {
@@ -314,10 +375,10 @@ describe('SnowTimeline', () => {
   });
 
   describe('Period legend', () => {
-    it('renders the legend with AM, PM, and Night labels', () => {
+    it('renders the legend with Morning, Day, and Night labels by default', () => {
       renderTimeline(recentDays, forecastDays);
-      expect(screen.getByText('AM')).toBeInTheDocument();
-      expect(screen.getByText('PM')).toBeInTheDocument();
+      expect(screen.getByText('Morning')).toBeInTheDocument();
+      expect(screen.getByText('Day')).toBeInTheDocument();
       expect(screen.getByText('Night')).toBeInTheDocument();
     });
 
@@ -335,9 +396,17 @@ describe('SnowTimeline', () => {
 
     it('legend items have hover tooltips explaining time ranges', () => {
       renderTimeline(recentDays, forecastDays);
-      expect(screen.getByTitle('AM \u2014 6 am to 12 pm')).toBeInTheDocument();
-      expect(screen.getByTitle('PM \u2014 12 pm to 6 pm')).toBeInTheDocument();
-      expect(screen.getByTitle('Night \u2014 6 pm to 6 am')).toBeInTheDocument();
+      expect(screen.getByTitle('Morning \u2014 12 am to 8 am')).toBeInTheDocument();
+      expect(screen.getByTitle('Day \u2014 8 am to 6 pm')).toBeInTheDocument();
+      expect(screen.getByTitle('Night \u2014 6 pm to 12 am')).toBeInTheDocument();
+    });
+
+    it('switches legend labels and tooltips in ski day mode', () => {
+      renderTimeline(recentDays, forecastDays, undefined, 'ski');
+      expect(screen.getByText('Overnight')).toBeInTheDocument();
+      expect(screen.getByText('Daytime')).toBeInTheDocument();
+      expect(screen.getByTitle('Overnight \u2014 6 pm previous day to 8 am')).toBeInTheDocument();
+      expect(screen.getByTitle('Daytime \u2014 8 am to 6 pm')).toBeInTheDocument();
     });
   });
 });
