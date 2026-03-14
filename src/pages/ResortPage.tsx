@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef, useId } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import {
   Snowflake, BarChart3, Clock, Sun, Thermometer,
-  TrendingUp, AlertTriangle, RefreshCw, Star, Layers,
+  TrendingUp, AlertTriangle, RefreshCw, Star, Layers, Info,
 } from 'lucide-react';
 import { WeatherIcon } from '@/components/icons';
 import { getResortBySlug } from '@/data/resorts';
@@ -25,7 +25,44 @@ import { useUnits } from '@/context/UnitsContext';
 import { useTimezone } from '@/context/TimezoneContext';
 import type { ElevationBand, BandForecast, DailyMetrics } from '@/types';
 import type { ShareCardData } from '@/utils/shareCard';
+import {
+  getAttributedSnowfallTotal,
+  getSnowAttributionWindowHours,
+  type SnowAttributionMode,
+} from '@/components/snowTimelinePeriods';
 import './ResortPage.css';
+
+const SNOW_ATTRIBUTION_TOOLTIP = `Calendar day
+• Morning: 12 am–8 am
+• Day: 8 am–6 pm
+• Night: 6 pm–12 am
+
+Ski day
+• Overnight: 6 pm previous day–8 am today
+• Daytime: 8 am–6 pm today`;
+
+const SNOW_ATTRIBUTION_OPTIONS: Array<{ value: SnowAttributionMode; label: string }> = [
+  { value: 'calendar', label: 'Calendar day' },
+  { value: 'ski', label: 'Ski day' },
+];
+
+const SNOW_ATTRIBUTION_POPOVER_CONTENT = [
+  {
+    heading: 'Calendar day',
+    items: [
+      'Morning: 12 am–8 am',
+      'Day: 8 am–6 pm',
+      'Night: 6 pm–12 am',
+    ],
+  },
+  {
+    heading: 'Ski day',
+    items: [
+      'Overnight: 6 pm previous day–8 am today',
+      'Daytime: 8 am–6 pm today',
+    ],
+  },
+] as const;
 
 export function ResortPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -49,8 +86,15 @@ export function ResortPage() {
 
   const [band, setBand] = useState<ElevationBand>(initialBand);
   const [selectedDayIdx, setSelectedDayIdx] = useState(initialDay);
+  const [snowAttributionMode, setSnowAttributionMode] = useState<SnowAttributionMode>('calendar');
+  const [isAttributionInfoOpen, setIsAttributionInfoOpen] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const prevFetchedAtRef = useRef<string | undefined>(undefined);
+  const attributionInfoRef = useRef<HTMLDivElement>(null);
+  const attributionInfoButtonRef = useRef<HTMLButtonElement>(null);
+  const attributionPopoverRef = useRef<HTMLDivElement>(null);
+  const wasAttributionInfoOpenRef = useRef(false);
+  const attributionPopoverId = useId();
 
   // Track when forecast data arrives (keyed on fetchedAt to avoid re-runs)
   useEffect(() => {
@@ -64,6 +108,49 @@ export function ResortPage() {
   const handleRefresh = useCallback(() => {
     refetch();
   }, [refetch]);
+
+  const handleAttributionInfoClickOutside = useCallback((event: MouseEvent) => {
+    if (
+      attributionInfoRef.current
+      && !attributionInfoRef.current.contains(event.target as Node)
+    ) {
+      setIsAttributionInfoOpen(false);
+    }
+  }, []);
+
+  const handleAttributionInfoKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      setIsAttributionInfoOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isAttributionInfoOpen) return;
+
+    document.addEventListener('mousedown', handleAttributionInfoClickOutside);
+    document.addEventListener('keydown', handleAttributionInfoKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleAttributionInfoClickOutside);
+      document.removeEventListener('keydown', handleAttributionInfoKeyDown);
+    };
+  }, [handleAttributionInfoClickOutside, handleAttributionInfoKeyDown, isAttributionInfoOpen]);
+
+  useEffect(() => {
+    let focusTimeout: ReturnType<typeof setTimeout> | undefined;
+
+    if (isAttributionInfoOpen) {
+      focusTimeout = setTimeout(() => attributionPopoverRef.current?.focus(), 0);
+    } else if (wasAttributionInfoOpenRef.current) {
+      attributionInfoButtonRef.current?.focus();
+    }
+
+    wasAttributionInfoOpenRef.current = isAttributionInfoOpen;
+
+    return () => {
+      if (focusTimeout) clearTimeout(focusTimeout);
+    };
+  }, [isAttributionInfoOpen]);
 
   // Recent 14-day snowfall via forecast endpoint's past_days (no archive lag)
   const [recentDays, setRecentDays] = useState<DailyMetrics[]>([]);
@@ -105,6 +192,14 @@ export function ResortPage() {
   }, [forecast?.fetchedAt]);
 
   const bandData: BandForecast | undefined = forecast?.[band];
+  const displayedDailySnowfall = useMemo(
+    () =>
+      bandData
+        ? bandData.daily.map((d) =>
+            getAttributedSnowfallTotal(d.date, d.snowfallSum, bandData.hourly, snowAttributionMode))
+        : [],
+    [bandData, snowAttributionMode],
+  );
 
   // Compute hourly data for selected day
   const selectedDay = bandData?.daily[selectedDayIdx];
@@ -112,6 +207,10 @@ export function ResortPage() {
     if (!bandData || !selectedDay) return [];
     return bandData.hourly.filter((h) => h.time.startsWith(selectedDay.date));
   }, [bandData, selectedDay]);
+  const selectedDaySnowHourly = useMemo(() => {
+    if (!bandData || !selectedDay) return [];
+    return getSnowAttributionWindowHours(selectedDay.date, bandData.hourly, snowAttributionMode);
+  }, [bandData, selectedDay, snowAttributionMode]);
 
   // Compute snowpack depth — max snow_depth across ALL bands for today.
   // snow_depth is a grid-cell value so we take the max across bands to match
@@ -133,9 +232,8 @@ export function ResortPage() {
   }, [forecast]);
 
   // Compute 7-day total snowfall
-  const weekTotalSnow = bandData
-    ? bandData.daily.reduce((s, d) => s + d.snowfallSum, 0)
-    : 0;
+  const weekTotalSnow = (displayedDailySnowfall ?? []).reduce((sum, dailySnowfall) => sum + dailySnowfall, 0);
+  const selectedDaySnowfall = displayedDailySnowfall[selectedDayIdx] ?? selectedDay?.snowfallSum ?? 0;
 
   const shareCardData: ShareCardData | null = useMemo(
     () =>
@@ -143,6 +241,7 @@ export function ResortPage() {
         ? {
             resort,
             daily: bandData.daily,
+            displayedDailySnowfall,
             band,
             elevation: bandData.elevation,
             weekTotalSnow,
@@ -151,7 +250,7 @@ export function ResortPage() {
             elevUnit: elev,
           }
         : null,
-    [bandData, resort, band, weekTotalSnow, snow, temp, elev],
+    [bandData, resort, displayedDailySnowfall, band, weekTotalSnow, snow, temp, elev],
   );
 
   useEffect(() => {
@@ -268,6 +367,68 @@ export function ResortPage() {
         )}
       </section>
 
+      <div className="resort-page__toggle-row">
+        <div className="resort-page__attribution-control">
+          <div className="resort-page__attribution-header">
+            <span className="resort-page__attribution-label">Daily snow attribution</span>
+            <div className="resort-page__attribution-info-wrap" ref={attributionInfoRef}>
+              <button
+                type="button"
+                className="resort-page__attribution-info"
+                ref={attributionInfoButtonRef}
+                aria-label="Snow attribution time ranges"
+                aria-expanded={isAttributionInfoOpen}
+                aria-controls={attributionPopoverId}
+                title={SNOW_ATTRIBUTION_TOOLTIP}
+                onClick={() => setIsAttributionInfoOpen((open) => !open)}
+              >
+                <Info size={14} />
+              </button>
+              {isAttributionInfoOpen && (
+                <div
+                  id={attributionPopoverId}
+                  className="resort-page__attribution-popover"
+                  ref={attributionPopoverRef}
+                  role="dialog"
+                  tabIndex={-1}
+                  aria-label="Snow attribution time ranges"
+                >
+                  {SNOW_ATTRIBUTION_POPOVER_CONTENT.map((section) => (
+                    <section key={section.heading} className="resort-page__attribution-popover-section">
+                      <h3>{section.heading}</h3>
+                      <ul>
+                        {section.items.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <fieldset className="resort-page__attribution-toggle">
+            <legend className="resort-page__sr-only">Daily snow attribution</legend>
+            {SNOW_ATTRIBUTION_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={`resort-page__attribution-btn ${snowAttributionMode === option.value ? 'active' : ''}`}
+              >
+                <input
+                  className="resort-page__attribution-input"
+                  type="radio"
+                  name="snow-attribution"
+                  value={option.value}
+                  checked={snowAttributionMode === option.value}
+                  onChange={() => setSnowAttributionMode(option.value)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </fieldset>
+        </div>
+      </div>
+
       {/* ─── SNOW TIMELINE (hero position) ─── */}
       {bandData && recentDays.length > 0 && (
         <section className="resort-page__section animate-fade-in-up" style={{ animationDelay: '200ms' }}>
@@ -276,6 +437,7 @@ export function ResortPage() {
             recentDays={recentDays}
             forecastDays={bandData.daily}
             forecastHourly={bandData.hourly}
+            attributionMode={snowAttributionMode}
           />
         </section>
       )}
@@ -294,6 +456,7 @@ export function ResortPage() {
           {bandData.daily.map((d, i) => {
             const desc = weatherDescription(d.weatherCode);
             const isSelected = i === selectedDayIdx;
+            const displayedSnow = displayedDailySnowfall[i] ?? d.snowfallSum;
             return (
               <button
                 key={d.date}
@@ -311,7 +474,7 @@ export function ResortPage() {
                   {fmtTemp(d.temperatureMax, temp)} / {fmtTemp(d.temperatureMin, temp)}
                 </span>
                 <span className="day-card__snow">
-                  {d.snowfallSum > 0 ? <><Snowflake size={12} /> {fmtSnow(d.snowfallSum, snow)}</> : '—'}
+                  {displayedSnow > 0 ? <><Snowflake size={12} /> {fmtSnow(displayedSnow, snow)}</> : '—'}
                 </span>
               </button>
             );
@@ -348,6 +511,7 @@ export function ResortPage() {
               }}
               selectedDayIdx={selectedDayIdx}
               elevations={resort.elevation}
+              attributionMode={snowAttributionMode}
             />
           </section>
 
@@ -367,15 +531,19 @@ export function ResortPage() {
             {/* 7-day overview chart */}
             <div className="resort-page__chart-block">
               <h3 className="section-subtitle">7-Day Overview</h3>
-              <DailyForecastChart daily={bandData.daily} hourly={bandData.hourly} />
+              <DailyForecastChart
+                daily={bandData.daily}
+                hourly={bandData.hourly}
+                attributionMode={snowAttributionMode}
+              />
             </div>
 
             {/* Hourly snow breakdown for selected day */}
-            {selectedDayHourly.length > 0 && selectedDay && (
+            {selectedDaySnowHourly.length > 0 && selectedDay && (
               <HourlySnowChart
-                hourly={selectedDayHourly}
+                hourly={selectedDaySnowHourly}
                 dayLabel={selectedDayLabel}
-                snowfallSum={selectedDay.snowfallSum}
+                snowfallSum={selectedDaySnowfall}
               />
             )}
           </section>
