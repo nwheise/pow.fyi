@@ -13,8 +13,8 @@ globalThis.setInterval = setIntervalMock as unknown as typeof setInterval;
 const originalDateNow = Date.now;
 const originalWindowAddEventListener = window.addEventListener;
 const originalDocumentAddEventListener = document.addEventListener;
-const originalLocation = globalThis.location;
-const originalCaches = globalThis.caches;
+const originalLocationDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'location');
+const originalCachesDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'caches');
 
 const windowEventListeners = new Map<string, EventListener>();
 const documentEventListeners = new Map<string, EventListener>();
@@ -33,14 +33,28 @@ const deleteCacheMock = mock(() => Promise.resolve(true));
 
 window.addEventListener = windowAddEventListenerMock as unknown as typeof window.addEventListener;
 document.addEventListener = documentAddEventListenerMock as unknown as typeof document.addEventListener;
-Object.defineProperty(globalThis, 'location', {
-  value: { reload: reloadMock },
-  configurable: true,
-});
-Object.defineProperty(globalThis, 'caches', {
-  value: { delete: deleteCacheMock },
-  configurable: true,
-});
+
+function defineMockGlobalValue(name: 'location' | 'caches', value: unknown) {
+  const originalDescriptor = name === 'location' ? originalLocationDescriptor : originalCachesDescriptor;
+  Object.defineProperty(globalThis, name, {
+    value,
+    configurable: true,
+    enumerable: originalDescriptor?.enumerable ?? false,
+    writable: true,
+  });
+}
+
+function restoreGlobalValue(name: 'location' | 'caches', descriptor: PropertyDescriptor | undefined) {
+  if (descriptor) {
+    Object.defineProperty(globalThis, name, descriptor);
+    return;
+  }
+
+  delete (globalThis as Record<string, unknown>)[name];
+}
+
+defineMockGlobalValue('location', { reload: reloadMock });
+defineMockGlobalValue('caches', { delete: deleteCacheMock });
 
 const { registerAppServiceWorker } = await import('@/pwa');
 
@@ -54,14 +68,8 @@ afterAll(() => {
   Date.now = originalDateNow;
   window.addEventListener = originalWindowAddEventListener;
   document.addEventListener = originalDocumentAddEventListener;
-  Object.defineProperty(globalThis, 'location', {
-    value: originalLocation,
-    configurable: true,
-  });
-  Object.defineProperty(globalThis, 'caches', {
-    value: originalCaches,
-    configurable: true,
-  });
+  restoreGlobalValue('location', originalLocationDescriptor);
+  restoreGlobalValue('caches', originalCachesDescriptor);
 });
 
 beforeEach(() => {
