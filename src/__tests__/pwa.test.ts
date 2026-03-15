@@ -44,6 +44,11 @@ Object.defineProperty(globalThis, 'caches', {
 
 const { registerAppServiceWorker } = await import('@/pwa');
 
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 afterAll(() => {
   globalThis.setInterval = originalSetInterval;
   Date.now = originalDateNow;
@@ -124,8 +129,7 @@ describe('registerAppServiceWorker', () => {
 
     Date.now = mock(() => 60 * 60 * 1000) as typeof Date.now;
     handleFocus?.(new Event('focus'));
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushMicrotasks();
 
     expect(deleteCacheMock).toHaveBeenCalledTimes(2);
     expect(deleteCacheMock).toHaveBeenCalledWith('open-meteo-cache');

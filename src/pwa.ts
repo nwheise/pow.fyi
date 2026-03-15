@@ -24,7 +24,7 @@ export function registerAppServiceWorker() {
   };
 
   const checkForStalePage = () => {
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+    if (document.visibilityState === 'hidden') return;
     void reloadIfPageIsStale();
   };
 
