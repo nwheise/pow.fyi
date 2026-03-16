@@ -50,6 +50,40 @@ export function SearchDropdown({ query, onQueryChange, isFav, onToggleFavorite }
     setActiveIndex(-1);
   }, [query]);
 
+  // Auto-fetch nearby resorts if geolocation permission is already granted
+  useEffect(() => {
+    let cancelled = false;
+
+    async function maybeFetchNearby() {
+      if (!navigator.permissions || !navigator.geolocation) return;
+      try {
+        const status = await navigator.permissions.query({ name: 'geolocation' });
+        if (status.state !== 'granted') return;
+      } catch {
+        return;
+      }
+
+      setGeoLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          if (cancelled) return;
+          setNearbyResorts(
+            getNearbyResorts(pos.coords.latitude, pos.coords.longitude, MAX_RESULTS),
+          );
+          setGeoLoading(false);
+        },
+        () => {
+          if (cancelled) return;
+          setGeoLoading(false);
+        },
+        { timeout: 5000 },
+      );
+    }
+
+    maybeFetchNearby();
+    return () => { cancelled = true; };
+  }, []);
+
   const goToResort = useCallback(
     (slug: string) => {
       setOpen(false);
