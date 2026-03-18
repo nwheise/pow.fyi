@@ -102,6 +102,36 @@ function makeBandForecast(band: 'base' | 'mid' | 'top', elevation: number): Band
         relativeHumidity: 80,
         precipitation: 0,
         rain: 0,
+        snowfall: snowfallByBand.nextEvening,
+        precipitationProbability: 60,
+        weatherCode: 73,
+        windSpeed: 15,
+        windDirection: 270,
+        windGusts: 25,
+        freezingLevelHeight: 2500,
+      },
+      {
+        time: '2025-01-16T03:00:00',
+        temperature: -5,
+        apparentTemperature: -10,
+        relativeHumidity: 80,
+        precipitation: 0,
+        rain: 0,
+        snowfall: snowfallByBand.dayTwoOvernight,
+        precipitationProbability: 60,
+        weatherCode: 73,
+        windSpeed: 15,
+        windDirection: 270,
+        windGusts: 25,
+        freezingLevelHeight: 2500,
+      },
+      {
+        time: '2025-01-16T10:00:00',
+        temperature: -5,
+        apparentTemperature: -10,
+        relativeHumidity: 80,
+        precipitation: 0,
+        rain: 0,
         snowfall: snowfallByBand.dayTwoDay,
         precipitationProbability: 60,
         weatherCode: 73,
@@ -257,6 +287,27 @@ async function renderResortPage(slug = 'vail-co') {
   });
 
   return result;
+}
+
+function ShareDataProbe() {
+  const { cardData } = useShare();
+  return <pre data-testid="share-card-data">{JSON.stringify(cardData)}</pre>;
+}
+
+function renderResortPageWithShareData(slug = 'vail-co') {
+  return render(
+    <UnitsProvider>
+      <TimezoneProvider>
+        <ShareProvider>
+          <MemoryRouter initialEntries={[`/resort/${slug}`]}>
+            <Routes>
+              <Route path="/resort/:slug" element={<ResortPage />} />
+            </Routes>
+          </MemoryRouter>
+        </ShareProvider>
+      </TimezoneProvider>
+    </UnitsProvider>,
+  );
 }
 
 function ShareDataProbe() {

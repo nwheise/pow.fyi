@@ -1044,3 +1044,19 @@ Requested feature to add a fun easter egg for the "argo" keyword, following the 
 - `src/pages/HomePage.css` — added `.home__easter-egg-image--argo` (static, no spin) and `.home__easter-egg-image--argo-shoot` (translateX + transition) styles
 - `src/pages/__tests__/HomePage.test.tsx` — added tests for case-insensitive argo detection, partial-match exclusion, and shoot animation timing (3s hold → shoot class added)
 - `src/resources/images/argo.jpg` — new image asset
+## Stale PWA Auto-Refresh
+
+### What changed
+Added a stale-session guard in the PWA bootstrap that automatically reloads visible pages after they have been open for at least one hour. Before reloading, the app clears the in-memory fetch cache and deletes the weather-related service worker caches so refreshed sessions fetch fresh forecast data instead of immediately reusing stale responses.
+
+The stale check runs on an hourly interval and also when the page regains attention via `focus`, `pageshow`, or `visibilitychange`, which helps installed web-app sessions and long-lived tabs recover without requiring a manual refresh.
+
+### Why
+Installed PWAs and long-lived tabs could keep showing stale forecast data indefinitely, especially when resumed later from a saved web-app session. This behavior change ensures the app self-recovers from stale client-side data during active use.
+
+### Key files affected
+- `src/pwa.ts` — added the stale-session timer, visibility-aware reload checks, fetch-cache clearing, and weather-cache invalidation before reload
+- `src/__tests__/pwa.test.ts` — added coverage for stale reload behavior and the browser-global mocks used by the PWA bootstrap tests
+
+### Follow-up notes
+- Automatic reloads only happen for visible pages after the one-hour threshold; hidden tabs are left alone until the user returns to them.
