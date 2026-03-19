@@ -1031,6 +1031,19 @@ Requested feature (GitHub issue: "Babka Easter Egg") to add a bouncing laser-eye
 
 ---
 
+## Argo Easter Egg
+
+### What changed
+Added a fourth easter egg triggered by searching "argo" (case-insensitive) in the home page search bar. When triggered, a full-screen dark overlay displays the Argo image centered on screen. The image holds still for 3 seconds, then shoots off-screen to the right via a CSS `translateX(120vw)` transition (0.5s ease-in), and auto-dismisses once the animation completes (3.5s total). Clicking or pressing Enter/Space on the overlay also dismisses it early.
+
+### Why
+Requested feature to add a fun easter egg for the "argo" keyword, following the same pattern as the existing ofek, mfjh, and babka easter eggs.
+
+### Key files affected
+- `src/pages/HomePage.tsx` — added `isArgoEasterEgg` derived state, `isArgoShooting` state, shoot+dismiss `useEffect`, and argo overlay JSX with `data-testid="argo-easter-egg"`
+- `src/pages/HomePage.css` — added `.home__easter-egg-image--argo` (static, no spin) and `.home__easter-egg-image--argo-shoot` (translateX + transition) styles
+- `src/pages/__tests__/HomePage.test.tsx` — added tests for case-insensitive argo detection, partial-match exclusion, and shoot animation timing (3s hold → shoot class added)
+- `src/resources/images/argo.jpg` — new image asset
 ## Stale PWA Auto-Refresh
 
 ### What changed

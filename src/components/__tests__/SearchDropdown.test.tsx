@@ -1,5 +1,7 @@
+import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { act, screen, within } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { screen, within, waitFor } from '@testing-library/react';
+import { act, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SearchDropdown } from '@/components/SearchDropdown';
 import { renderWithProviders } from '@/test/test-utils';
@@ -11,19 +13,23 @@ const mockToggle = mock((slug: string) => {
   else favSlugs.add(slug);
 });
 
-function renderDropdown(initialQuery = '') {
+async function renderDropdown(initialQuery = '') {
   currentQuery = initialQuery;
   function onChange(q: string) {
     currentQuery = q;
   }
-  const result = renderWithProviders(
-    <SearchDropdown
-      query={currentQuery}
-      onQueryChange={onChange}
-      isFav={(slug) => favSlugs.has(slug)}
-      onToggleFavorite={mockToggle}
-    />,
-  );
+  let result: ReturnType<typeof renderWithProviders> | null = null;
+  await act(async () => {
+    result = renderWithProviders(
+      <SearchDropdown
+        query={currentQuery}
+        onQueryChange={onChange}
+        isFav={(slug) => favSlugs.has(slug)}
+        onToggleFavorite={mockToggle}
+      />,
+    );
+  });
+
   return result;
 }
 
@@ -86,26 +92,26 @@ afterEach(() => {
 });
 
 describe('SearchDropdown', () => {
-  it('renders the search input', () => {
-    renderDropdown();
+  it('renders the search input', async () => {
+    await renderDropdown();
     expect(screen.getByPlaceholderText('Search resorts…')).toBeInTheDocument();
   });
 
-  it('has combobox role and aria-label', () => {
-    renderDropdown();
+  it('has combobox role and aria-label', async () => {
+    await renderDropdown();
     const input = screen.getByRole('combobox');
     expect(input).toBeInTheDocument();
     expect(input).toHaveAttribute('aria-label', 'Search resorts');
   });
 
-  it('does not show dropdown when query is empty', () => {
-    renderDropdown();
+  it('does not show dropdown when query is empty', async () => {
+    await renderDropdown();
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
   it('shows dropdown with results when query matches', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     const input = screen.getByRole('combobox');
     await user.click(input);
     const panel = screen.getByRole('listbox');
@@ -117,7 +123,7 @@ describe('SearchDropdown', () => {
 
   it('shows no-match message for invalid query', async () => {
     const user = userEvent.setup();
-    renderDropdown('zzznotaresort');
+    await renderDropdown('zzznotaresort');
     const input = screen.getByRole('combobox');
     await user.click(input);
     expect(screen.getByText(/no resorts match/i)).toBeInTheDocument();
@@ -125,7 +131,7 @@ describe('SearchDropdown', () => {
 
   it('navigates on result click', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     const input = screen.getByRole('combobox');
     await user.click(input);
     const options = screen.getAllByRole('option');
@@ -136,7 +142,7 @@ describe('SearchDropdown', () => {
 
   it('supports keyboard navigation', async () => {
     const user = userEvent.setup();
-    renderDropdown('Colorado');
+    await renderDropdown('Colorado');
     const input = screen.getByRole('combobox');
     await user.click(input);
 
@@ -153,7 +159,7 @@ describe('SearchDropdown', () => {
 
   it('closes dropdown on Escape', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     const input = screen.getByRole('combobox');
     await user.click(input);
     expect(screen.getByRole('listbox')).toBeInTheDocument();
@@ -162,11 +168,13 @@ describe('SearchDropdown', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
-  it('limits results to max 8', () => {
+  it('limits results to max 8', async () => {
     // "US" matches many resorts - should cap at 8
-    renderDropdown('US');
+    await renderDropdown('US');
     const input = screen.getByRole('combobox');
-    input.focus();
+    await act(async () => {
+      input.focus();
+    });
     const panel = screen.queryByRole('listbox');
     if (panel) {
       const options = within(panel).queryAllByRole('option');
@@ -176,7 +184,7 @@ describe('SearchDropdown', () => {
 
   it('shows star buttons on each result', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     await user.click(screen.getByRole('combobox'));
     const favButtons = screen.getAllByTitle('Add to favorites');
     expect(favButtons.length).toBeGreaterThanOrEqual(1);
@@ -184,7 +192,7 @@ describe('SearchDropdown', () => {
 
   it('calls onToggleFavorite when star is clicked', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     await user.click(screen.getByRole('combobox'));
     const favButton = screen.getAllByTitle('Add to favorites')[0];
     await user.click(favButton);
@@ -193,7 +201,7 @@ describe('SearchDropdown', () => {
 
   it('does not navigate when star is clicked', async () => {
     const user = userEvent.setup();
-    renderDropdown('Vail');
+    await renderDropdown('Vail');
     await user.click(screen.getByRole('combobox'));
     const favButton = screen.getAllByTitle('Add to favorites')[0];
     await user.click(favButton);
@@ -206,7 +214,7 @@ describe('SearchDropdown geolocation auto-fetch', () => {
   it('auto-fetches nearby resorts when permission is already granted', async () => {
     mockPermissions('granted');
     mockGeolocation();
-    renderDropdown();
+    await renderDropdown();
 
     const locationBtn = screen.getByTitle('Show nearby resorts');
     await waitFor(() => {
@@ -289,7 +297,7 @@ describe('SearchDropdown geolocation auto-fetch', () => {
     const user = userEvent.setup();
     mockPermissions('granted');
     mockGeolocation();
-    renderDropdown();
+    await renderDropdown();
 
     const locationBtn = screen.getByTitle('Show nearby resorts');
     await waitFor(() => {

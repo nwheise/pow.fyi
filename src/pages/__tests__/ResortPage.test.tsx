@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { UnitsProvider } from '@/context/UnitsContext';
 import { TimezoneProvider } from '@/context/TimezoneContext';
 import { ShareProvider, useShare } from '@/context/ShareContext';
-import { render } from '@testing-library/react';
+import { act, render } from '@testing-library/react';
 import type { BandForecast } from '@/types';
 
 function makeBandForecast(band: 'base' | 'mid' | 'top', elevation: number): BandForecast {
@@ -67,6 +67,36 @@ function makeBandForecast(band: 'base' | 'mid' | 'top', elevation: number): Band
       },
       {
         time: '2025-01-15T20:00:00',
+        temperature: -5,
+        apparentTemperature: -10,
+        relativeHumidity: 80,
+        precipitation: 0,
+        rain: 0,
+        snowfall: snowfallByBand.nextEvening,
+        precipitationProbability: 60,
+        weatherCode: 73,
+        windSpeed: 15,
+        windDirection: 270,
+        windGusts: 25,
+        freezingLevelHeight: 2500,
+      },
+      {
+        time: '2025-01-16T03:00:00',
+        temperature: -5,
+        apparentTemperature: -10,
+        relativeHumidity: 80,
+        precipitation: 0,
+        rain: 0,
+        snowfall: snowfallByBand.dayTwoOvernight,
+        precipitationProbability: 60,
+        weatherCode: 73,
+        windSpeed: 15,
+        windDirection: 270,
+        windGusts: 25,
+        freezingLevelHeight: 2500,
+      },
+      {
+        time: '2025-01-16T10:00:00',
         temperature: -5,
         apparentTemperature: -10,
         relativeHumidity: 80,
@@ -238,20 +268,25 @@ afterAll(() => {
   mock.restore();
 });
 
-function renderResortPage(slug = 'vail-co') {
-  return render(
-    <UnitsProvider>
-      <TimezoneProvider>
-        <ShareProvider>
-          <MemoryRouter initialEntries={[`/resort/${slug}`]}>
-            <Routes>
-              <Route path="/resort/:slug" element={<ResortPage />} />
-            </Routes>
-          </MemoryRouter>
-        </ShareProvider>
-      </TimezoneProvider>
-    </UnitsProvider>,
-  );
+async function renderResortPage(slug = 'vail-co') {
+  let result: ReturnType<typeof render> | null = null;
+  await act(async () => {
+    result = render(
+      <UnitsProvider>
+        <TimezoneProvider>
+          <ShareProvider>
+            <MemoryRouter initialEntries={[`/resort/${slug}`]}>
+              <Routes>
+                <Route path="/resort/:slug" element={<ResortPage />} />
+              </Routes>
+            </MemoryRouter>
+          </ShareProvider>
+        </TimezoneProvider>
+      </UnitsProvider>,
+    );
+  });
+
+  return result;
 }
 
 function ShareDataProbe() {
@@ -259,47 +294,52 @@ function ShareDataProbe() {
   return <pre data-testid="share-card-data">{JSON.stringify(cardData)}</pre>;
 }
 
-function renderResortPageWithShareData(slug = 'vail-co') {
-  return render(
-    <UnitsProvider>
-      <TimezoneProvider>
-        <ShareProvider>
-          <MemoryRouter initialEntries={[`/resort/${slug}`]}>
-            <Routes>
-              <Route path="/resort/:slug" element={<ResortPage />} />
-            </Routes>
-          </MemoryRouter>
-          <ShareDataProbe />
-        </ShareProvider>
-      </TimezoneProvider>
-    </UnitsProvider>,
-  );
+async function renderResortPageWithShareData(slug = 'vail-co') {
+  let result: ReturnType<typeof render> | null = null;
+  await act(async () => {
+    result = render(
+      <UnitsProvider>
+        <TimezoneProvider>
+          <ShareProvider>
+            <MemoryRouter initialEntries={[`/resort/${slug}`]}>
+              <Routes>
+                <Route path="/resort/:slug" element={<ResortPage />} />
+              </Routes>
+            </MemoryRouter>
+            <ShareDataProbe />
+          </ShareProvider>
+        </TimezoneProvider>
+      </UnitsProvider>,
+    );
+  });
+
+  return result;
 }
 
 describe('ResortPage', () => {
-  it('renders resort name', () => {
-    renderResortPage();
+  it('renders resort name', async () => {
+    await renderResortPage();
     expect(screen.getByText('Vail')).toBeInTheDocument();
   });
 
-  it('renders region and country', () => {
-    renderResortPage();
+  it('renders region and country', async () => {
+    await renderResortPage();
     expect(screen.getByText(/Colorado, US/)).toBeInTheDocument();
   });
 
-  it('renders back link', () => {
-    renderResortPage();
+  it('renders back link', async () => {
+    await renderResortPage();
     expect(screen.getByText('← All Resorts')).toBeInTheDocument();
   });
 
-  it('renders website link', () => {
-    renderResortPage();
+  it('renders website link', async () => {
+    await renderResortPage();
     const link = screen.getByText('Website ↗');
     expect(link).toHaveAttribute('href', 'https://www.vail.com');
   });
 
-  it('renders mountain cams link when available', () => {
-    renderResortPage();
+  it('renders mountain cams link when available', async () => {
+    await renderResortPage();
     const link = screen.getByText('Mountain Cams ↗');
     expect(link).toHaveAttribute(
       'href',
@@ -307,13 +347,13 @@ describe('ResortPage', () => {
     );
   });
 
-  it('omits mountain cams link when unavailable', () => {
-    renderResortPage('lee-canyon-nv');
+  it('omits mountain cams link when unavailable', async () => {
+    await renderResortPage('lee-canyon-nv');
     expect(screen.queryByText('Mountain Cams ↗')).not.toBeInTheDocument();
   });
 
-  it('renders elevation stats', () => {
-    renderResortPage();
+  it('renders elevation stats', async () => {
+    await renderResortPage();
     // Stats section labels (duplicated by ElevationToggle, so use getAllByText)
     expect(screen.getAllByText('Base').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Mid').length).toBeGreaterThanOrEqual(1);
@@ -321,25 +361,25 @@ describe('ResortPage', () => {
     expect(screen.getByText('Vertical')).toBeInTheDocument();
   });
 
-  it('renders lifts count', () => {
-    renderResortPage();
+  it('renders lifts count', async () => {
+    await renderResortPage();
     expect(screen.getByText('Lifts')).toBeInTheDocument();
     expect(screen.getByText('31')).toBeInTheDocument();
   });
 
-  it('renders acres', () => {
-    renderResortPage();
+  it('renders acres', async () => {
+    await renderResortPage();
     expect(screen.getByText('Acres')).toBeInTheDocument();
     expect(screen.getByText('5,317')).toBeInTheDocument();
   });
 
-  it('renders elevation toggle', () => {
-    renderResortPage();
+  it('renders elevation toggle', async () => {
+    await renderResortPage();
     expect(screen.getByRole('radiogroup', { name: 'Elevation band' })).toBeInTheDocument();
   });
 
-  it('renders a calendar day / ski day attribution toggle that defaults to calendar day', () => {
-    renderResortPage();
+  it('renders a calendar day / ski day attribution toggle that defaults to calendar day', async () => {
+    await renderResortPage();
     expect(screen.getAllByText('Daily snow attribution').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeChecked();
     expect(screen.getByRole('radio', { name: 'Ski day' })).not.toBeChecked();
@@ -347,7 +387,7 @@ describe('ResortPage', () => {
 
   it('shows the attribution tooltip and allows switching to ski day', async () => {
     const user = userEvent.setup();
-    renderResortPage();
+    await renderResortPage();
     expect(screen.getByTitle(/Calendar day/)).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Ski day' }));
     expect(screen.getByRole('radio', { name: 'Calendar day' })).not.toBeChecked();
@@ -356,12 +396,12 @@ describe('ResortPage', () => {
 
   it('keeps displayed snowfall totals in sync when attribution mode changes', async () => {
     const user = userEvent.setup();
-    renderResortPage();
+    await renderResortPage();
 
     const selectedDayCard = screen.getByRole('button', { pressed: true });
     const conditionsTable = screen.getByRole('table', { name: 'Conditions by elevation' });
     expect(within(selectedDayCard).getByText('5.1"')).toBeInTheDocument();
-    expect(screen.getByText('7.1" next 7 days')).toBeInTheDocument();
+    expect(screen.getByText('8.3" next 7 days')).toBeInTheDocument();
     expect(screen.getByTestId('hourly-snow-chart')).toHaveTextContent('Hourly snow total: 13');
     expect(screen.getByTestId('hourly-snow-chart')).toHaveTextContent(
       'Hours: 2025-01-15T02:00:00,2025-01-15T09:00:00,2025-01-15T20:00:00',
@@ -375,7 +415,7 @@ describe('ResortPage', () => {
 
     const updatedConditionsTable = screen.getByRole('table', { name: 'Conditions by elevation' });
     expect(within(screen.getByRole('button', { pressed: true })).getByText('5.9"')).toBeInTheDocument();
-    expect(screen.getByText('8.3" next 7 days')).toBeInTheDocument();
+    expect(screen.getByText('9.4" next 7 days')).toBeInTheDocument();
     expect(screen.getByTestId('hourly-snow-chart')).toHaveTextContent('Hourly snow total: 15');
     expect(screen.getByTestId('hourly-snow-chart')).toHaveTextContent(
       'Hours: 2025-01-14T19:00:00,2025-01-15T02:00:00,2025-01-15T09:00:00',
@@ -388,26 +428,26 @@ describe('ResortPage', () => {
 
   it('stores attribution-aware daily snowfall in the shared card data', async () => {
     const user = userEvent.setup();
-    renderResortPageWithShareData();
+    await renderResortPageWithShareData();
 
     await waitFor(() => {
       const cardData = JSON.parse(screen.getByTestId('share-card-data').textContent ?? 'null');
-      expect(cardData.displayedDailySnowfall).toEqual([13, 5]);
-      expect(cardData.weekTotalSnow).toBe(18);
+      expect(cardData.displayedDailySnowfall).toEqual([13, 8]);
+      expect(cardData.weekTotalSnow).toBe(21);
     });
 
     await user.click(screen.getByRole('radio', { name: 'Ski day' }));
 
     await waitFor(() => {
       const cardData = JSON.parse(screen.getByTestId('share-card-data').textContent ?? 'null');
-      expect(cardData.displayedDailySnowfall).toEqual([15, 6]);
-      expect(cardData.weekTotalSnow).toBe(21);
+      expect(cardData.displayedDailySnowfall).toEqual([15, 9]);
+      expect(cardData.weekTotalSnow).toBe(24);
     });
   });
 
   it('opens and closes the attribution info popover from the info icon', async () => {
     const user = userEvent.setup();
-    renderResortPage();
+    await renderResortPage();
 
     const infoButton = screen.getByRole('button', { name: 'Snow attribution time ranges' });
     expect(infoButton).toHaveAttribute('aria-expanded', 'false');
@@ -428,8 +468,8 @@ describe('ResortPage', () => {
     expect(screen.queryByRole('dialog', { name: 'Snow attribution time ranges' })).not.toBeInTheDocument();
   });
 
-  it('renders refresh button in header', () => {
-    renderResortPage();
+  it('renders refresh button in header', async () => {
+    await renderResortPage();
     const refreshBtn = screen.getByText('Refresh');
     expect(refreshBtn).toBeInTheDocument();
     // Refresh button should be inside the header element
@@ -438,22 +478,22 @@ describe('ResortPage', () => {
     expect(header?.classList.contains('resort-page__header')).toBe(true);
   });
 
-  it('shows last refreshed timestamp when data loaded', () => {
-    renderResortPage();
+  it('shows last refreshed timestamp when data loaded', async () => {
+    await renderResortPage();
     // The mock returns forecast data immediately, so lastRefreshed should be set
     const refreshedSpan = document.querySelector('.resort-page__last-refreshed');
     expect(refreshedSpan).toBeTruthy();
   });
 
-  it('renders favorite toggle button', () => {
-    renderResortPage();
+  it('renders favorite toggle button', async () => {
+    await renderResortPage();
     expect(
       screen.getByLabelText(/add to favorites|remove from favorites/i),
     ).toBeInTheDocument();
   });
 
-  it('renders selected day card buttons before conditions section', () => {
-    renderResortPage();
+  it('renders selected day card buttons before conditions section', async () => {
+    await renderResortPage();
     const selectedDayCard = screen.getByRole('button', { pressed: true });
     const conditionsHeading = screen.getByRole('heading', { name: /Conditions —/i });
     expect(
@@ -461,8 +501,8 @@ describe('ResortPage', () => {
     ).toBeTruthy();
   });
 
-  it('shows not found for invalid slug', () => {
-    renderResortPage('nonexistent-resort');
+  it('shows not found for invalid slug', async () => {
+    await renderResortPage('nonexistent-resort');
     expect(screen.getByText('Resort not found')).toBeInTheDocument();
     expect(screen.getByText('← Back to all resorts')).toBeInTheDocument();
   });
