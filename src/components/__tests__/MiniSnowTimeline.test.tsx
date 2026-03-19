@@ -58,11 +58,12 @@ function renderMiniTimeline(
   pastDays: DailyMetrics[],
   forecastDays: DailyMetrics[],
   forecastHourly?: HourlyMetrics[],
+  attributionMode?: 'calendar' | 'ski',
 ) {
   return render(
     <UnitsProvider>
       <TimezoneProvider>
-        <MiniSnowTimeline pastDays={pastDays} forecastDays={forecastDays} forecastHourly={forecastHourly} />
+        <MiniSnowTimeline pastDays={pastDays} forecastDays={forecastDays} forecastHourly={forecastHourly} attributionMode={attributionMode} />
       </TimezoneProvider>
     </UnitsProvider>,
   );
@@ -256,6 +257,65 @@ describe('MiniSnowTimeline', () => {
       expect(screen.getByTitle('AM \u2014 6 am to 12 pm')).toBeInTheDocument();
       expect(screen.getByTitle('PM \u2014 12 pm to 6 pm')).toBeInTheDocument();
       expect(screen.getByTitle('Night \u2014 6 pm to 6 am')).toBeInTheDocument();
+    });
+  });
+
+  describe('Ski mode', () => {
+    // Previous day (2025-01-14): heavy evening snow (overnightSnow=12 means h18-23 get 1cm/h = 6cm total)
+    // Today (2025-01-15): amSnow=6, pmSnow=4, overnightSnow=8
+    //   Ski overnight = prevDay h18-23 (6cm) + today h0-5 (4cm) + today h6-7 (2cm) = 12cm
+    //   Ski daytime  = today h8-11 (4cm) + today h12-17 (4cm) = 8cm
+    //   Ski total    = 20cm → 7.9" imperial
+    //   Calendar snowfallSum = 18cm → 7.1" imperial
+    const skiHourly = [
+      ...makeHourlyDay('2025-01-14', 0, 0, 12),
+      ...makeHourlyDay('2025-01-15', 6, 4, 8),
+    ];
+
+    // Use the normal forecastDays but override today with snowfallSum=18 (calendar total)
+    const skiTodayForecast = [
+      makeDailyMetrics('2025-01-15', 18),
+      ...forecastDays.slice(1),
+    ];
+
+    it('renders "Overnight" and "Daytime" in the legend, not AM/PM/Night', () => {
+      renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'ski');
+      expect(screen.getByText('Overnight')).toBeInTheDocument();
+      expect(screen.getByText('Daytime')).toBeInTheDocument();
+      expect(screen.queryByText('AM')).not.toBeInTheDocument();
+      expect(screen.queryByText('PM')).not.toBeInTheDocument();
+      expect(screen.queryByText('Night')).not.toBeInTheDocument();
+    });
+
+    it('legend items have ski-mode tooltips', () => {
+      renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'ski');
+      expect(screen.getByTitle('Overnight \u2014 6 pm previous day to 8 am')).toBeInTheDocument();
+      expect(screen.getByTitle('Daytime \u2014 8 am to 6 pm')).toBeInTheDocument();
+    });
+
+    it('shows ski-day attributed total for today (overnight + daytime, not calendar snowfallSum)', () => {
+      const { container } = renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'ski');
+      const todayValue = container.querySelector('.mini-timeline__value--today');
+      // Ski total: 12cm overnight + 8cm daytime = 20cm = 7.9" imperial
+      expect(todayValue!.textContent).toBe('7.9');
+    });
+
+    it('calendar mode still shows calendar-day total for today', () => {
+      const { container } = renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'calendar');
+      const todayValue = container.querySelector('.mini-timeline__value--today');
+      // Calendar snowfallSum: 18cm = 7.1" imperial
+      expect(todayValue!.textContent).toBe('7.1');
+    });
+
+    it('today column has period sub-bars with non-zero overnight and daytime heights in ski mode', () => {
+      const { container } = renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'ski');
+      const todayCol = container.querySelector('.mini-timeline__col--today');
+      expect(todayCol!.querySelector('.mini-timeline__track--periods')).toBeInTheDocument();
+      const overnightBar = todayCol!.querySelector('.mini-timeline__bar--overnight') as HTMLElement;
+      expect(parseFloat(overnightBar.style.height)).toBeGreaterThan(0);
+      // pm bar = daytime in ski mode
+      const pmBar = todayCol!.querySelector('.mini-timeline__bar--pm') as HTMLElement;
+      expect(parseFloat(pmBar.style.height)).toBeGreaterThan(0);
     });
   });
 });

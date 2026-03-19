@@ -10,7 +10,7 @@ import type { DailyMetrics, HourlyMetrics } from '@/types';
 import { useUnits } from '@/context/UnitsContext';
 import { useTimezone } from '@/context/TimezoneContext';
 import { cmToIn } from '@/utils/weather';
-import { splitDayPeriods, splitSnowAttributionPeriods, type SnowAttributionMode } from './snowTimelinePeriods';
+import { splitDayPeriods, splitSnowAttributionPeriods, getAttributedSnowfallTotal, type SnowAttributionMode } from './snowTimelinePeriods';
 import './MiniSnowTimeline.css';
 
 interface Props {
@@ -48,7 +48,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
     // Compute per-day period bars — ski mode uses attribution periods, calendar uses AM/PM/Overnight
     function getPeriods(date: string) {
       if (!forecastHourly) return null;
-      if (isSkiMode) {
+      if (attributionMode === 'ski') {
         const skiPeriods = splitSnowAttributionPeriods(date, forecastHourly, 'ski');
         const overnight = skiPeriods.find((p) => p.key === 'overnight')?.snowfall ?? 0;
         const daytime = skiPeriods.find((p) => p.key === 'daytime')?.snowfall ?? 0;
@@ -58,12 +58,19 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
       return { am: toDisplay(p.am), pm: toDisplay(p.pm), overnight: toDisplay(p.overnight) };
     }
 
+    // Compute displayed snow total — in ski mode (with hourly), use attribution window so it
+    // matches the sum of the sub-bars rather than the raw calendar-day snowfallSum.
+    function getSnowTotal(date: string, fallback: number): number {
+      if (!forecastHourly) return fallback;
+      return getAttributedSnowfallTotal(date, fallback, forecastHourly, attributionMode);
+    }
+
     const todayPeriods = todayDay ? getPeriods(todayDay.date) : null;
 
     const todayBar = todayDay
       ? {
           date: todayDay.date,
-          snow: toDisplay(todayDay.snowfallSum),
+          snow: toDisplay(getSnowTotal(todayDay.date, todayDay.snowfallSum)),
           am: todayPeriods?.am ?? 0,
           pm: todayPeriods?.pm ?? 0,
           overnight: todayPeriods?.overnight ?? 0,
@@ -74,7 +81,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
       const periods = getPeriods(d.date);
       return {
         date: d.date,
-        snow: toDisplay(d.snowfallSum),
+        snow: toDisplay(getSnowTotal(d.date, d.snowfallSum)),
         am: periods?.am ?? 0,
         pm: periods?.pm ?? 0,
         overnight: periods?.overnight ?? 0,
@@ -95,7 +102,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
     const maxSnow = Math.max(...allSnow, 0.1);
 
     return { pastBars, todayBar, futureBars, maxSnow };
-  }, [pastDays, forecastDays, forecastHourly, isImperial, isSkiMode]);
+  }, [pastDays, forecastDays, forecastHourly, isImperial, attributionMode]);
 
   const fmtDay = (dateStr: string) =>
     fmtDate(dateStr + 'T12:00:00', { weekday: 'short' });
