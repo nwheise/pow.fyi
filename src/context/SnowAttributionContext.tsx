@@ -11,11 +11,15 @@ const COOKIE_MAX_AGE = 365 * 24 * 60 * 60; // 1 year in seconds
 
 function readCookie(): SnowAttributionMode {
   try {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${COOKIE_NAME}=`);
-    if (parts.length === 2) {
-      const v = parts.pop()?.split(';').shift();
-      if (v === 'calendar' || v === 'ski') return v;
+    const cookies = document.cookie.split(';');
+    for (const cookie of cookies) {
+      const [rawName, ...rest] = cookie.split('=');
+      const name = rawName?.trim();
+      if (name === COOKIE_NAME) {
+        const v = rest.join('=').trim();
+        if (v === 'calendar' || v === 'ski') return v;
+        break;
+      }
     }
   } catch { /* ignore */ }
   return 'calendar';
