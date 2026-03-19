@@ -317,5 +317,28 @@ describe('MiniSnowTimeline', () => {
       const pmBar = todayCol!.querySelector('.mini-timeline__bar--pm') as HTMLElement;
       expect(parseFloat(pmBar.style.height)).toBeGreaterThan(0);
     });
+
+    it('renders ski-mode period bars as overnight first then daytime', () => {
+      const { container } = renderMiniTimeline(pastDays, skiTodayForecast, skiHourly, 'ski');
+      const todayTrack = container.querySelector('.mini-timeline__col--today .mini-timeline__track--periods');
+      const classes = Array.from(todayTrack!.children).map((el) => (el as HTMLElement).className);
+
+      expect(classes).toEqual([
+        'mini-timeline__bar mini-timeline__bar--overnight',
+        'mini-timeline__bar mini-timeline__bar--pm',
+      ]);
+    });
+
+    it('keeps calendar-mode period bar order as am, pm, overnight', () => {
+      const { container } = renderMiniTimeline(pastDays, forecastDays, skiHourly, 'calendar');
+      const todayTrack = container.querySelector('.mini-timeline__col--today .mini-timeline__track--periods');
+      const classes = Array.from(todayTrack!.children).map((el) => (el as HTMLElement).className);
+
+      expect(classes).toEqual([
+        'mini-timeline__bar mini-timeline__bar--am',
+        'mini-timeline__bar mini-timeline__bar--pm',
+        'mini-timeline__bar mini-timeline__bar--overnight',
+      ]);
+    });
   });
 });

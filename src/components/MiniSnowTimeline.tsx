@@ -120,6 +120,47 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
 
   const unit = isImperial ? '"' : 'cm';
 
+  const renderPeriodBars = (
+    bar: { am: number; pm: number; overnight: number },
+    isToday = false,
+  ) => {
+    const classes = isToday
+      ? 'mini-timeline__track mini-timeline__track--periods mini-timeline__track--today-border'
+      : 'mini-timeline__track mini-timeline__track--periods';
+
+    if (isSkiMode) {
+      return (
+        <div className={classes}>
+          <div
+            className="mini-timeline__bar mini-timeline__bar--overnight"
+            style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
+          />
+          <div
+            className="mini-timeline__bar mini-timeline__bar--pm"
+            style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className={classes}>
+        <div
+          className="mini-timeline__bar mini-timeline__bar--am"
+          style={{ height: `${Math.max((bar.am / maxSnow) * 100, bar.am > 0 ? 4 : 0)}%` }}
+        />
+        <div
+          className="mini-timeline__bar mini-timeline__bar--pm"
+          style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
+        />
+        <div
+          className="mini-timeline__bar mini-timeline__bar--overnight"
+          style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
+        />
+      </div>
+    );
+  };
+
   /** Render a future-style bar (with optional AM/PM/Overnight sub-bars) */
   const renderFutureBar = (bar: {
     date: string;
@@ -139,20 +180,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
           {bar.snow}
         </span>
         {hasPeriods ? (
-          <div className="mini-timeline__track mini-timeline__track--periods">
-            <div
-              className="mini-timeline__bar mini-timeline__bar--am"
-              style={{ height: `${Math.max((bar.am / maxSnow) * 100, bar.am > 0 ? 4 : 0)}%` }}
-            />
-            <div
-              className="mini-timeline__bar mini-timeline__bar--pm"
-              style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
-            />
-            <div
-              className="mini-timeline__bar mini-timeline__bar--overnight"
-              style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
-            />
-          </div>
+          renderPeriodBars(bar)
         ) : (
           <div className="mini-timeline__track">
             <div
@@ -198,20 +226,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attri
             {todayBar.snow}
           </span>
           {forecastHourly && (todayBar.am > 0 || todayBar.pm > 0 || todayBar.overnight > 0) ? (
-            <div className="mini-timeline__track mini-timeline__track--periods mini-timeline__track--today-border">
-              <div
-                className="mini-timeline__bar mini-timeline__bar--am"
-                style={{ height: `${Math.max((todayBar.am / maxSnow) * 100, todayBar.am > 0 ? 4 : 0)}%` }}
-              />
-              <div
-                className="mini-timeline__bar mini-timeline__bar--pm"
-                style={{ height: `${Math.max((todayBar.pm / maxSnow) * 100, todayBar.pm > 0 ? 4 : 0)}%` }}
-              />
-              <div
-                className="mini-timeline__bar mini-timeline__bar--overnight"
-                style={{ height: `${Math.max((todayBar.overnight / maxSnow) * 100, todayBar.overnight > 0 ? 4 : 0)}%` }}
-              />
-            </div>
+            renderPeriodBars(todayBar, true)
           ) : (
             <div className="mini-timeline__track">
               <div
