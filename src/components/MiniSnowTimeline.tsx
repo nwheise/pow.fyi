@@ -10,7 +10,7 @@ import type { DailyMetrics, HourlyMetrics } from '@/types';
 import { useUnits } from '@/context/UnitsContext';
 import { useTimezone } from '@/context/TimezoneContext';
 import { cmToIn } from '@/utils/weather';
-import { splitDayPeriods } from './snowTimelinePeriods';
+import { splitDayPeriods, splitSnowAttributionPeriods, type SnowAttributionMode } from './snowTimelinePeriods';
 import './MiniSnowTimeline.css';
 
 interface Props {
@@ -20,12 +20,15 @@ interface Props {
   forecastDays: DailyMetrics[];
   /** Hourly forecast data — used to split future days into AM/PM/Overnight */
   forecastHourly?: HourlyMetrics[];
+  /** Snow attribution mode: 'calendar' (default) or 'ski' */
+  attributionMode?: SnowAttributionMode;
 }
 
-export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Props) {
+export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly, attributionMode = 'calendar' }: Props) {
   const { snow } = useUnits();
   const { fmtDate } = useTimezone();
   const isImperial = snow === 'in';
+  const isSkiMode = attributionMode === 'ski';
 
   const { pastBars, todayBar, futureBars, maxSnow } = useMemo(() => {
     const toDisplay = (cm: number) =>
@@ -42,28 +45,57 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Pro
     const [todayDay, ...rest] = forecastDays;
     const future = rest.slice(0, 7); // next 7 days
 
-    const todayPeriods = todayDay && forecastHourly
-      ? splitDayPeriods(todayDay.date, forecastHourly)
-      : null;
+    // Compute per-day period bars — ski mode uses attribution periods, calendar uses AM/PM/Overnight
+    function getPeriods(date: string) {
+      if (!forecastHourly) return null;
+      if (attributionMode === 'ski') {
+        const skiPeriods = splitSnowAttributionPeriods(date, forecastHourly, 'ski');
+        const overnightCm = skiPeriods.find((p) => p.key === 'overnight')?.snowfall ?? 0;
+        const daytimeCm = skiPeriods.find((p) => p.key === 'daytime')?.snowfall ?? 0;
+        const totalCm = daytimeCm + overnightCm;
+        return {
+          am: 0,
+          pm: toDisplay(daytimeCm),
+          overnight: toDisplay(overnightCm),
+          total: toDisplay(totalCm),
+        };
+      }
+      const p = splitDayPeriods(date, forecastHourly);
+      const totalCm = p.am + p.pm + p.overnight;
+      return {
+        am: toDisplay(p.am),
+        pm: toDisplay(p.pm),
+        overnight: toDisplay(p.overnight),
+        total: toDisplay(totalCm),
+      };
+    }
+
+    const todayPeriods = todayDay ? getPeriods(todayDay.date) : null;
 
     const todayBar = todayDay
       ? {
           date: todayDay.date,
-          snow: toDisplay(todayDay.snowfallSum),
-          am: todayPeriods ? toDisplay(todayPeriods.am) : 0,
-          pm: todayPeriods ? toDisplay(todayPeriods.pm) : 0,
-          overnight: todayPeriods ? toDisplay(todayPeriods.overnight) : 0,
+          snow:
+            attributionMode === 'ski' && forecastHourly && todayPeriods
+              ? todayPeriods.total
+              : toDisplay(todayDay.snowfallSum),
+          am: todayPeriods?.am ?? 0,
+          pm: todayPeriods?.pm ?? 0,
+          overnight: todayPeriods?.overnight ?? 0,
         }
       : null;
 
     const futureBars = future.map((d) => {
-      const periods = forecastHourly ? splitDayPeriods(d.date, forecastHourly) : null;
+      const periods = getPeriods(d.date);
       return {
         date: d.date,
-        snow: toDisplay(d.snowfallSum),
-        am: periods ? toDisplay(periods.am) : 0,
-        pm: periods ? toDisplay(periods.pm) : 0,
-        overnight: periods ? toDisplay(periods.overnight) : 0,
+        snow:
+          attributionMode === 'ski' && forecastHourly && periods
+            ? periods.total
+            : toDisplay(d.snowfallSum),
+        am: periods?.am ?? 0,
+        pm: periods?.pm ?? 0,
+        overnight: periods?.overnight ?? 0,
       };
     });
 
@@ -81,12 +113,53 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Pro
     const maxSnow = Math.max(...allSnow, 0.1);
 
     return { pastBars, todayBar, futureBars, maxSnow };
-  }, [pastDays, forecastDays, forecastHourly, isImperial]);
+  }, [pastDays, forecastDays, forecastHourly, isImperial, attributionMode]);
 
   const fmtDay = (dateStr: string) =>
     fmtDate(dateStr + 'T12:00:00', { weekday: 'short' });
 
   const unit = isImperial ? '"' : 'cm';
+
+  const renderPeriodBars = (
+    bar: { am: number; pm: number; overnight: number },
+    isToday = false,
+  ) => {
+    const classes = isToday
+      ? 'mini-timeline__track mini-timeline__track--periods mini-timeline__track--today-border'
+      : 'mini-timeline__track mini-timeline__track--periods';
+
+    if (isSkiMode) {
+      return (
+        <div className={classes}>
+          <div
+            className="mini-timeline__bar mini-timeline__bar--overnight"
+            style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
+          />
+          <div
+            className="mini-timeline__bar mini-timeline__bar--pm"
+            style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div className={classes}>
+        <div
+          className="mini-timeline__bar mini-timeline__bar--am"
+          style={{ height: `${Math.max((bar.am / maxSnow) * 100, bar.am > 0 ? 4 : 0)}%` }}
+        />
+        <div
+          className="mini-timeline__bar mini-timeline__bar--pm"
+          style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
+        />
+        <div
+          className="mini-timeline__bar mini-timeline__bar--overnight"
+          style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
+        />
+      </div>
+    );
+  };
 
   /** Render a future-style bar (with optional AM/PM/Overnight sub-bars) */
   const renderFutureBar = (bar: {
@@ -107,20 +180,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Pro
           {bar.snow}
         </span>
         {hasPeriods ? (
-          <div className="mini-timeline__track mini-timeline__track--periods">
-            <div
-              className="mini-timeline__bar mini-timeline__bar--am"
-              style={{ height: `${Math.max((bar.am / maxSnow) * 100, bar.am > 0 ? 4 : 0)}%` }}
-            />
-            <div
-              className="mini-timeline__bar mini-timeline__bar--pm"
-              style={{ height: `${Math.max((bar.pm / maxSnow) * 100, bar.pm > 0 ? 4 : 0)}%` }}
-            />
-            <div
-              className="mini-timeline__bar mini-timeline__bar--overnight"
-              style={{ height: `${Math.max((bar.overnight / maxSnow) * 100, bar.overnight > 0 ? 4 : 0)}%` }}
-            />
-          </div>
+          renderPeriodBars(bar)
         ) : (
           <div className="mini-timeline__track">
             <div
@@ -166,20 +226,7 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Pro
             {todayBar.snow}
           </span>
           {forecastHourly && (todayBar.am > 0 || todayBar.pm > 0 || todayBar.overnight > 0) ? (
-            <div className="mini-timeline__track mini-timeline__track--periods mini-timeline__track--today-border">
-              <div
-                className="mini-timeline__bar mini-timeline__bar--am"
-                style={{ height: `${Math.max((todayBar.am / maxSnow) * 100, todayBar.am > 0 ? 4 : 0)}%` }}
-              />
-              <div
-                className="mini-timeline__bar mini-timeline__bar--pm"
-                style={{ height: `${Math.max((todayBar.pm / maxSnow) * 100, todayBar.pm > 0 ? 4 : 0)}%` }}
-              />
-              <div
-                className="mini-timeline__bar mini-timeline__bar--overnight"
-                style={{ height: `${Math.max((todayBar.overnight / maxSnow) * 100, todayBar.overnight > 0 ? 4 : 0)}%` }}
-              />
-            </div>
+            renderPeriodBars(todayBar, true)
           ) : (
             <div className="mini-timeline__track">
               <div
@@ -197,18 +244,33 @@ export function MiniSnowTimeline({ pastDays, forecastDays, forecastHourly }: Pro
 
       {/* Legend */}
       <div className="mini-timeline__legend" aria-label="Legend">
-        <span className="mini-timeline__legend-item" title="AM — 6 am to 12 pm">
-          <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--am" />
-          AM
-        </span>
-        <span className="mini-timeline__legend-item" title="PM — 12 pm to 6 pm">
-          <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--pm" />
-          PM
-        </span>
-        <span className="mini-timeline__legend-item" title="Night — 6 pm to 6 am">
-          <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--overnight" />
-          Night
-        </span>
+        {isSkiMode ? (
+          <>
+            <span className="mini-timeline__legend-item" title="Overnight — 6 pm previous day to 8 am">
+              <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--overnight" />
+              Overnight
+            </span>
+            <span className="mini-timeline__legend-item" title="Daytime — 8 am to 6 pm">
+              <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--pm" />
+              Daytime
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="mini-timeline__legend-item" title="AM — 6 am to 12 pm">
+              <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--am" />
+              AM
+            </span>
+            <span className="mini-timeline__legend-item" title="PM — 12 pm to 6 pm">
+              <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--pm" />
+              PM
+            </span>
+            <span className="mini-timeline__legend-item" title="Night — 6 pm to 6 am">
+              <span className="mini-timeline__legend-swatch mini-timeline__legend-swatch--overnight" />
+              Night
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

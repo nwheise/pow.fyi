@@ -21,6 +21,7 @@ async function triggerEasterEgg(trigger: string) {
 
 beforeEach(() => {
   localStorage.clear();
+  document.cookie = 'pow_snow_attribution=; max-age=0; path=/';
 });
 
 afterEach(() => {
@@ -498,6 +499,37 @@ describe('HomePage', () => {
       await user.keyboard('{Escape}');
 
       expect(screen.queryByTestId('babka-easter-egg')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Snow attribution toggle', () => {
+    it('renders Calendar day and Ski day options', async () => {
+      await renderHomePage();
+      expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeInTheDocument();
+      expect(screen.getByRole('radio', { name: 'Ski day' })).toBeInTheDocument();
+    });
+
+    it('defaults to Calendar day', async () => {
+      await renderHomePage();
+      expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Ski day' })).not.toBeChecked();
+    });
+
+    it('switches to Ski day when clicked', async () => {
+      const user = userEvent.setup();
+      await renderHomePage();
+      await user.click(screen.getByRole('radio', { name: 'Ski day' }));
+      expect(screen.getByRole('radio', { name: 'Ski day' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Calendar day' })).not.toBeChecked();
+    });
+
+    it('can switch back to Calendar day after choosing Ski day', async () => {
+      const user = userEvent.setup();
+      await renderHomePage();
+      await user.click(screen.getByRole('radio', { name: 'Ski day' }));
+      await user.click(screen.getByRole('radio', { name: 'Calendar day' }));
+      expect(screen.getByRole('radio', { name: 'Calendar day' })).toBeChecked();
+      expect(screen.getByRole('radio', { name: 'Ski day' })).not.toBeChecked();
     });
   });
 });
